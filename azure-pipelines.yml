@@ -91,54 +91,50 @@ stages:
     resourceGroupName: 'rg-myapp-test-v2'  # ✅ Using your actual RG name
     environmentName: 'dev'
   jobs:
-  - deployment: DeployToDev
+  - job: DeployToDev  # ✅ CHANGED: Using regular job instead of deployment
     displayName: 'Deploy to Development'
     pool:
       vmImage: $(vmImageName)
-    environment: 'development'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - checkout: self
+    steps:
+    - checkout: self
+    
+    - task: AzureCLI@2
+      displayName: 'Deploy to Development'
+      inputs:
+        azureSubscription: $(azureServiceConnection)  # ✅ Now this will work
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az bicep install
           
-          - task: AzureCLI@2
-            displayName: 'Deploy to Development'
-            inputs:
-              azureSubscription: $(azureServiceConnection)
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                az bicep install
-                
-                echo "🚀 Deploying to Development environment..."
-                az deployment group create \
-                  --resource-group $(resourceGroupName) \
-                  --template-file $(bicepFile) \
-                  --parameters @$(parametersFile) environment=$(environmentName) \
-                  --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
-                  --verbose
-                
-                echo "✅ Development deployment completed"
+          echo "🚀 Deploying to Development environment..."
+          az deployment group create \
+            --resource-group $(resourceGroupName) \
+            --template-file $(bicepFile) \
+            --parameters @$(parametersFile) environment=$(environmentName) \
+            --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
+            --verbose
+          
+          echo "✅ Development deployment completed"
 
-          - task: AzureCLI@2
-            displayName: 'Verify Development Deployment'
-            inputs:
-              azureSubscription: $(azureServiceConnection)
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                echo "🔍 Verifying deployment..."
-                az deployment group show \
-                  --resource-group $(resourceGroupName) \
-                  --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
-                  --query properties.provisioningState
-                
-                echo "📊 Deployment outputs:"
-                az deployment group show \
-                  --resource-group $(resourceGroupName) \
-                  --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
-                  --query properties.outputs
+    - task: AzureCLI@2
+      displayName: 'Verify Development Deployment'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🔍 Verifying deployment..."
+          az deployment group show \
+            --resource-group $(resourceGroupName) \
+            --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
+            --query properties.provisioningState
+          
+          echo "📊 Deployment outputs:"
+          az deployment group show \
+            --resource-group $(resourceGroupName) \
+            --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
+            --query properties.outputs
 
 # Deploy to Staging (automatic promotion from dev, only for main branch)
 - stage: DeployStaging
@@ -153,48 +149,44 @@ stages:
     resourceGroupName: 'rg-myapp-test-v2'  # ✅ Using same RG for testing
     environmentName: 'staging'
   jobs:
-  - deployment: DeployToStaging
+  - job: DeployToStaging  # ✅ CHANGED: Using regular job
     displayName: 'Deploy to Staging'
     pool:
       vmImage: $(vmImageName)
-    environment: 'staging'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - checkout: self
-          
-          - task: AzureCLI@2
-            displayName: 'What-If Analysis (Staging)'
-            inputs:
-              azureSubscription: $(azureServiceConnection)
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                az bicep install
-                echo "🔍 Analyzing changes for Staging environment..."
-                az deployment group what-if \
-                  --resource-group $(resourceGroupName) \
-                  --template-file $(bicepFile) \
-                  --parameters @$(parametersFile) environment=$(environmentName) \
-                  --result-format FullResourcePayloads
+    steps:
+    - checkout: self
+    
+    - task: AzureCLI@2
+      displayName: 'What-If Analysis (Staging)'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az bicep install
+          echo "🔍 Analyzing changes for Staging environment..."
+          az deployment group what-if \
+            --resource-group $(resourceGroupName) \
+            --template-file $(bicepFile) \
+            --parameters @$(parametersFile) environment=$(environmentName) \
+            --result-format FullResourcePayloads
 
-          - task: AzureCLI@2
-            displayName: 'Deploy to Staging'
-            inputs:
-              azureSubscription: $(azureServiceConnection)
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                echo "🎯 Deploying to Staging environment..."
-                az deployment group create \
-                  --resource-group $(resourceGroupName) \
-                  --template-file $(bicepFile) \
-                  --parameters @$(parametersFile) environment=$(environmentName) \
-                  --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
-                  --verbose
-                
-                echo "✅ Staging deployment completed"
+    - task: AzureCLI@2
+      displayName: 'Deploy to Staging'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🎯 Deploying to Staging environment..."
+          az deployment group create \
+            --resource-group $(resourceGroupName) \
+            --template-file $(bicepFile) \
+            --parameters @$(parametersFile) environment=$(environmentName) \
+            --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
+            --verbose
+          
+          echo "✅ Staging deployment completed"
 
 # Deploy to Production (manual approval required)
 - stage: DeployProd
@@ -209,70 +201,66 @@ stages:
     resourceGroupName: 'rg-myapp-test-v2'  # ✅ Using same RG for testing
     environmentName: 'prod'
   jobs:
-  - deployment: DeployToProduction
+  - job: DeployToProduction  # ✅ CHANGED: Using regular job
     displayName: 'Deploy to Production'
     pool:
       vmImage: $(vmImageName)
-    environment: 'production'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - checkout: self
+    steps:
+    - checkout: self
+    
+    - task: AzureCLI@2
+      displayName: 'Final What-If Analysis (Production)'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az bicep install
+          echo "🔍 Final analysis for Production environment..."
+          az deployment group what-if \
+            --resource-group $(resourceGroupName) \
+            --template-file $(bicepFile) \
+            --parameters @$(parametersFile) environment=$(environmentName) \
+            --result-format FullResourcePayloads
+
+    - task: AzureCLI@2
+      displayName: 'Deploy to Production'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🏭 Deploying to Production environment..."
+          az deployment group create \
+            --resource-group $(resourceGroupName) \
+            --template-file $(bicepFile) \
+            --parameters @$(parametersFile) environment=$(environmentName) \
+            --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
+            --verbose
           
-          - task: AzureCLI@2
-            displayName: 'Final What-If Analysis (Production)'
-            inputs:
-              azureSubscription: $(azureServiceConnection)
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                az bicep install
-                echo "🔍 Final analysis for Production environment..."
-                az deployment group what-if \
-                  --resource-group $(resourceGroupName) \
-                  --template-file $(bicepFile) \
-                  --parameters @$(parametersFile) environment=$(environmentName) \
-                  --result-format FullResourcePayloads
+          echo "🎉 Production deployment completed successfully!"
 
-          - task: AzureCLI@2
-            displayName: 'Deploy to Production'
-            inputs:
-              azureSubscription: $(azureServiceConnection)
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                echo "🏭 Deploying to Production environment..."
-                az deployment group create \
-                  --resource-group $(resourceGroupName) \
-                  --template-file $(bicepFile) \
-                  --parameters @$(parametersFile) environment=$(environmentName) \
-                  --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
-                  --verbose
-                
-                echo "🎉 Production deployment completed successfully!"
-
-          - task: AzureCLI@2
-            displayName: 'Post-Deployment Verification'
-            inputs:
-              azureSubscription: $(azureServiceConnection)
-              scriptType: 'bash'
-              scriptLocation: 'inlineScript'
-              inlineScript: |
-                echo "🔍 Verifying production deployment..."
-                deploymentStatus=$(az deployment group show \
-                  --resource-group $(resourceGroupName) \
-                  --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
-                  --query properties.provisioningState -o tsv)
-                
-                if [ "$deploymentStatus" = "Succeeded" ]; then
-                  echo "✅ Production deployment verified successfully"
-                  echo "📊 Deployment outputs:"
-                  az deployment group show \
-                    --resource-group $(resourceGroupName) \
-                    --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
-                    --query properties.outputs
-                else
-                  echo "❌ Production deployment verification failed"
-                  exit 1
-                fi
+    - task: AzureCLI@2
+      displayName: 'Post-Deployment Verification'
+      inputs:
+        azureSubscription: $(azureServiceConnection)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "🔍 Verifying production deployment..."
+          deploymentStatus=$(az deployment group show \
+            --resource-group $(resourceGroupName) \
+            --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
+            --query properties.provisioningState -o tsv)
+          
+          if [ "$deploymentStatus" = "Succeeded" ]; then
+            echo "✅ Production deployment verified successfully"
+            echo "📊 Deployment outputs:"
+            az deployment group show \
+              --resource-group $(resourceGroupName) \
+              --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
+              --query properties.outputs
+          else
+            echo "❌ Production deployment verification failed"
+            exit 1
+          fi
