@@ -21,7 +21,7 @@ pr:
 variables:
   # Replace with your actual service connection name
   azureServiceConnection: 'azure-service-connection-v2'  # Change this to match your service connection name
-  subscriptionId: 'your-subscription-id'      # Your Azure subscription ID
+  subscriptionId: 'db11dea1-6d39-4635-8129-55183eb04293'      # Your Azure subscription ID
   location: 'East US'
   
   # Build variables
@@ -73,7 +73,7 @@ stages:
           az deployment group what-if \
             --resource-group "rg-myapp-test-v2" \
             --template-file $(bicepFile) \
-            --parameters @$(devParametersFile) \
+            --parameters @bicep/main.parameters.dev.json \
             --result-format FullResourcePayloads
 
 # Deploy to Development (automatic for develop branch)
@@ -89,7 +89,7 @@ stages:
       )
     )
   variables:
-    resourceGroupName: 'rg-myapp-test-v2'
+    resourceGroupName: 'your-dev-resource-group-name'    # 👈 UPDATE THIS
     environmentName: 'dev'
   jobs:
   - deployment: DeployToDev
@@ -151,7 +151,7 @@ stages:
       eq(variables['Build.SourceBranch'], 'refs/heads/main')
     )
   variables:
-    resourceGroupName: 'rg-myapp-staging'
+    resourceGroupName: 'your-staging-resource-group-name'    # 👈 UPDATE THIS
     environmentName: 'staging'
   jobs:
   - deployment: DeployToStaging
@@ -177,7 +177,7 @@ stages:
                 az deployment group what-if \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @$(stagingParametersFile) \
+                  --parameters @bicep/main.parameters.staging.json \
                   --result-format FullResourcePayloads
 
           - task: AzureCLI@2
@@ -207,7 +207,7 @@ stages:
       eq(variables['Build.SourceBranch'], 'refs/heads/main')
     )
   variables:
-    resourceGroupName: 'rg-myapp-prod'
+    resourceGroupName: 'your-prod-resource-group-name'    # 👈 UPDATE THIS
     environmentName: 'prod'
   jobs:
   - deployment: DeployToProduction
@@ -233,7 +233,7 @@ stages:
                 az deployment group what-if \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @$(prodParametersFile) \
+                  --parameters @bicep/main.parameters.prod.json \
                   --result-format FullResourcePayloads
 
           - task: AzureCLI@2
@@ -247,7 +247,7 @@ stages:
                 az deployment group create \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @$(prodParametersFile) \
+                  --parameters @bicep/main.parameters.prod.json \
                   --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
                   --verbose
                 
