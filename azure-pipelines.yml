@@ -20,16 +20,15 @@ pr:
 
 variables:
   # Replace with your actual service connection name
-  azureServiceConnection: 'azure-service-connection-v2'  # Change this to match your service connection name
-  subscriptionId: 'db11dea1-6d39-4635-8129-55183eb04293'      # Your Azure subscription ID
+  azureServiceConnection: 'azure-service-connection-v2'  # ✅ This looks correct
+  subscriptionId: 'db11dea1-6d39-4635-8129-55183eb04293'
   location: 'East US'
   
   # Build variables
   vmImageName: 'ubuntu-latest'
   bicepFile: 'bicep/main.bicep'
-  devParametersFile: 'bicep/main.parameters.dev.json'
-  stagingParametersFile: 'bicep/main.parameters.staging.json'
-  prodParametersFile: 'bicep/main.parameters.prod.json'
+  # Using consistent parameter file reference
+  parametersFile: 'bicep/main.parameters.json'
 
 stages:
 # Always validate first
@@ -73,7 +72,7 @@ stages:
           az deployment group what-if \
             --resource-group "rg-myapp-test-v2" \
             --template-file $(bicepFile) \
-            --parameters @bicep/main.parameters.dev.json \
+            --parameters @$(parametersFile) environment=dev \
             --result-format FullResourcePayloads
 
 # Deploy to Development (automatic for develop branch)
@@ -89,7 +88,7 @@ stages:
       )
     )
   variables:
-    resourceGroupName: 'your-dev-resource-group-name'    # 👈 UPDATE THIS
+    resourceGroupName: 'rg-myapp-test-v2'  # ✅ Using your actual RG name
     environmentName: 'dev'
   jobs:
   - deployment: DeployToDev
@@ -106,7 +105,7 @@ stages:
           - task: AzureCLI@2
             displayName: 'Deploy to Development'
             inputs:
-              azureServiceConnection: $(azureServiceConnection)
+              azureSubscription: $(azureServiceConnection)
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
@@ -116,7 +115,7 @@ stages:
                 az deployment group create \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @$(devParametersFile) \
+                  --parameters @$(parametersFile) environment=$(environmentName) \
                   --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
                   --verbose
                 
@@ -125,7 +124,7 @@ stages:
           - task: AzureCLI@2
             displayName: 'Verify Development Deployment'
             inputs:
-              azureServiceConnection: $(azureServiceConnection)
+              azureSubscription: $(azureServiceConnection)
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
@@ -151,7 +150,7 @@ stages:
       eq(variables['Build.SourceBranch'], 'refs/heads/main')
     )
   variables:
-    resourceGroupName: 'your-staging-resource-group-name'    # 👈 UPDATE THIS
+    resourceGroupName: 'rg-myapp-test-v2'  # ✅ Using same RG for testing
     environmentName: 'staging'
   jobs:
   - deployment: DeployToStaging
@@ -177,13 +176,13 @@ stages:
                 az deployment group what-if \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @bicep/main.parameters.staging.json \
+                  --parameters @$(parametersFile) environment=$(environmentName) \
                   --result-format FullResourcePayloads
 
           - task: AzureCLI@2
             displayName: 'Deploy to Staging'
             inputs:
-              azureServiceConnection: $(azureServiceConnection)
+              azureSubscription: $(azureServiceConnection)
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
@@ -191,7 +190,7 @@ stages:
                 az deployment group create \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @$(stagingParametersFile) \
+                  --parameters @$(parametersFile) environment=$(environmentName) \
                   --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
                   --verbose
                 
@@ -207,7 +206,7 @@ stages:
       eq(variables['Build.SourceBranch'], 'refs/heads/main')
     )
   variables:
-    resourceGroupName: 'your-prod-resource-group-name'    # 👈 UPDATE THIS
+    resourceGroupName: 'rg-myapp-test-v2'  # ✅ Using same RG for testing
     environmentName: 'prod'
   jobs:
   - deployment: DeployToProduction
@@ -233,7 +232,7 @@ stages:
                 az deployment group what-if \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @bicep/main.parameters.prod.json \
+                  --parameters @$(parametersFile) environment=$(environmentName) \
                   --result-format FullResourcePayloads
 
           - task: AzureCLI@2
@@ -247,7 +246,7 @@ stages:
                 az deployment group create \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @bicep/main.parameters.prod.json \
+                  --parameters @$(parametersFile) environment=$(environmentName) \
                   --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
                   --verbose
                 
@@ -256,7 +255,7 @@ stages:
           - task: AzureCLI@2
             displayName: 'Post-Deployment Verification'
             inputs:
-              azureServiceConnection: $(azureServiceConnection)
+              azureSubscription: $(azureServiceConnection)
               scriptType: 'bash'
               scriptLocation: 'inlineScript'
               inlineScript: |
