@@ -19,15 +19,17 @@ pr:
       - 'bicep/*'
 
 variables:
-  # Replace with your values
-  azureServiceConnection: 'azure-service-connection-v2'
-  subscriptionId: 'your-subscription-id'
+  # Replace with your actual service connection name
+  azureServiceConnection: 'azure-service-connection-v2'  # Change this to match your service connection name
+  subscriptionId: 'your-subscription-id'      # Your Azure subscription ID
   location: 'East US'
   
   # Build variables
   vmImageName: 'ubuntu-latest'
   bicepFile: 'bicep/main.bicep'
-  parametersFile: 'bicep/main.parameters.json'
+  devParametersFile: 'bicep/main.parameters.dev.json'
+  stagingParametersFile: 'bicep/main.parameters.staging.json'
+  prodParametersFile: 'bicep/main.parameters.prod.json'
 
 stages:
 # Always validate first
@@ -71,7 +73,7 @@ stages:
           az deployment group what-if \
             --resource-group "rg-myapp-test-v2" \
             --template-file $(bicepFile) \
-            --parameters @$(parametersFile) environment=dev \
+            --parameters @$(devParametersFile) \
             --result-format FullResourcePayloads
 
 # Deploy to Development (automatic for develop branch)
@@ -114,7 +116,7 @@ stages:
                 az deployment group create \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @$(parametersFile) environment=$(environmentName) \
+                  --parameters @$(devParametersFile) \
                   --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
                   --verbose
                 
@@ -175,7 +177,7 @@ stages:
                 az deployment group what-if \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @$(parametersFile) environment=$(environmentName) \
+                  --parameters @$(stagingParametersFile) \
                   --result-format FullResourcePayloads
 
           - task: AzureCLI@2
@@ -189,7 +191,7 @@ stages:
                 az deployment group create \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @$(parametersFile) environment=$(environmentName) \
+                  --parameters @$(stagingParametersFile) \
                   --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
                   --verbose
                 
@@ -231,7 +233,7 @@ stages:
                 az deployment group what-if \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @$(parametersFile) environment=$(environmentName) \
+                  --parameters @$(prodParametersFile) \
                   --result-format FullResourcePayloads
 
           - task: AzureCLI@2
@@ -245,7 +247,7 @@ stages:
                 az deployment group create \
                   --resource-group $(resourceGroupName) \
                   --template-file $(bicepFile) \
-                  --parameters @$(parametersFile) environment=$(environmentName) \
+                  --parameters @$(prodParametersFile) \
                   --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
                   --verbose
                 
