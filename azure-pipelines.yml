@@ -19,19 +19,15 @@ pr:
       - 'bicep/*'
 
 variables:
-  # Replace with your actual service connection name
-  azureServiceConnection: 'azure-service-connection-v2'  # ✅ This looks correct
+  azureServiceConnection: 'azure-service-connection-v2'
   subscriptionId: 'db11dea1-6d39-4635-8129-55183eb04293'
   location: 'East US'
-  
-  # Build variables
   vmImageName: 'ubuntu-latest'
   bicepFile: 'bicep/main.bicep'
-  # Using consistent parameter file reference
   parametersFile: 'bicep/main.parameters.json'
 
 stages:
-# Always validate first
+# Validate stage
 - stage: Validate
   displayName: 'Validate Bicep Template'
   jobs:
@@ -62,7 +58,7 @@ stages:
           echo "✅ Bicep template is syntactically valid"
 
     - task: AzureCLI@2
-      displayName: 'What-If Analysis (Dev)'
+      displayName: 'What-If Analysis'
       inputs:
         azureSubscription: $(azureServiceConnection)
         scriptType: 'bash'
@@ -75,7 +71,7 @@ stages:
             --parameters @$(parametersFile) environment=dev \
             --result-format FullResourcePayloads
 
-# Deploy to Development (automatic for develop branch)
+# Deploy to Development
 - stage: DeployDev
   displayName: '🚀 Deploy to Development'
   dependsOn: Validate
@@ -88,37 +84,49 @@ stages:
       )
     )
   variables:
-    resourceGroupName: 'rg-myapp-test-v2'  # ✅ Using your actual RG name
+    resourceGroupName: 'rg-myapp-test-v2'
     environmentName: 'dev'
   jobs:
-  - job: DeployToDev  # ✅ CHANGED: Using regular job instead of deployment
+  - job: DeployToDev
     displayName: 'Deploy to Development'
     pool:
       vmImage: $(vmImageName)
     steps:
     - checkout: self
     
+    # Convert Bicep to ARM first
     - task: AzureCLI@2
-      displayName: 'Deploy to Development'
+      displayName: 'Convert Bicep to ARM'
       inputs:
-        azureSubscription: $(azureServiceConnection)  # ✅ Now this will work
+        azureSubscription: $(azureServiceConnection)
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
           az bicep install
-          
-          echo "🚀 Deploying to Development environment..."
-          az deployment group create \
-            --resource-group $(resourceGroupName) \
-            --template-file $(bicepFile) \
-            --parameters @$(parametersFile) environment=$(environmentName) \
-            --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
-            --verbose
-          
-          echo "✅ Development deployment completed"
-
+          echo "Converting Bicep to ARM template..."
+          az bicep build --file $(bicepFile) --outfile bicep/main.json
+          echo "✅ Bicep converted to ARM template"
+    
+    # Deploy using ARM template task (more reliable)
+    - task: AzureResourceManagerTemplateDeployment@3
+      displayName: 'Deploy ARM Template'
+      inputs:
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: $(azureServiceConnection)
+        subscriptionId: $(subscriptionId)
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: $(resourceGroupName)
+        location: $(location)
+        templateLocation: 'Linked artifact'
+        csmFile: 'bicep/main.json'
+        csmParametersFile: $(parametersFile)
+        overrideParameters: '-environment $(environmentName)'
+        deploymentMode: 'Incremental'
+        deploymentName: 'bicep-$(environmentName)-$(Build.BuildNumber)'
+    
+    # Verify deployment
     - task: AzureCLI@2
-      displayName: 'Verify Development Deployment'
+      displayName: 'Verify Deployment'
       inputs:
         azureSubscription: $(azureServiceConnection)
         scriptType: 'bash'
@@ -136,7 +144,7 @@ stages:
             --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
             --query properties.outputs
 
-# Deploy to Staging (automatic promotion from dev, only for main branch)
+# Deploy to Staging
 - stage: DeployStaging
   displayName: '🎯 Deploy to Staging'
   dependsOn: DeployDev
@@ -146,10 +154,10 @@ stages:
       eq(variables['Build.SourceBranch'], 'refs/heads/main')
     )
   variables:
-    resourceGroupName: 'rg-myapp-test-v2'  # ✅ Using same RG for testing
+    resourceGroupName: 'rg-myapp-test-v2'
     environmentName: 'staging'
   jobs:
-  - job: DeployToStaging  # ✅ CHANGED: Using regular job
+  - job: DeployToStaging
     displayName: 'Deploy to Staging'
     pool:
       vmImage: $(vmImageName)
@@ -157,38 +165,32 @@ stages:
     - checkout: self
     
     - task: AzureCLI@2
-      displayName: 'What-If Analysis (Staging)'
+      displayName: 'Convert Bicep to ARM'
       inputs:
         azureSubscription: $(azureServiceConnection)
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
           az bicep install
-          echo "🔍 Analyzing changes for Staging environment..."
-          az deployment group what-if \
-            --resource-group $(resourceGroupName) \
-            --template-file $(bicepFile) \
-            --parameters @$(parametersFile) environment=$(environmentName) \
-            --result-format FullResourcePayloads
-
-    - task: AzureCLI@2
+          az bicep build --file $(bicepFile) --outfile bicep/main.json
+    
+    - task: AzureResourceManagerTemplateDeployment@3
       displayName: 'Deploy to Staging'
       inputs:
-        azureSubscription: $(azureServiceConnection)
-        scriptType: 'bash'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          echo "🎯 Deploying to Staging environment..."
-          az deployment group create \
-            --resource-group $(resourceGroupName) \
-            --template-file $(bicepFile) \
-            --parameters @$(parametersFile) environment=$(environmentName) \
-            --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
-            --verbose
-          
-          echo "✅ Staging deployment completed"
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: $(azureServiceConnection)
+        subscriptionId: $(subscriptionId)
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: $(resourceGroupName)
+        location: $(location)
+        templateLocation: 'Linked artifact'
+        csmFile: 'bicep/main.json'
+        csmParametersFile: $(parametersFile)
+        overrideParameters: '-environment $(environmentName)'
+        deploymentMode: 'Incremental'
+        deploymentName: 'bicep-$(environmentName)-$(Build.BuildNumber)'
 
-# Deploy to Production (manual approval required)
+# Deploy to Production
 - stage: DeployProd
   displayName: '🏭 Deploy to Production'
   dependsOn: DeployStaging
@@ -198,10 +200,10 @@ stages:
       eq(variables['Build.SourceBranch'], 'refs/heads/main')
     )
   variables:
-    resourceGroupName: 'rg-myapp-test-v2'  # ✅ Using same RG for testing
+    resourceGroupName: 'rg-myapp-test-v2'
     environmentName: 'prod'
   jobs:
-  - job: DeployToProduction  # ✅ CHANGED: Using regular job
+  - job: DeployToProduction
     displayName: 'Deploy to Production'
     pool:
       vmImage: $(vmImageName)
@@ -209,37 +211,31 @@ stages:
     - checkout: self
     
     - task: AzureCLI@2
-      displayName: 'Final What-If Analysis (Production)'
+      displayName: 'Convert Bicep to ARM'
       inputs:
         azureSubscription: $(azureServiceConnection)
         scriptType: 'bash'
         scriptLocation: 'inlineScript'
         inlineScript: |
           az bicep install
-          echo "🔍 Final analysis for Production environment..."
-          az deployment group what-if \
-            --resource-group $(resourceGroupName) \
-            --template-file $(bicepFile) \
-            --parameters @$(parametersFile) environment=$(environmentName) \
-            --result-format FullResourcePayloads
-
-    - task: AzureCLI@2
+          az bicep build --file $(bicepFile) --outfile bicep/main.json
+    
+    - task: AzureResourceManagerTemplateDeployment@3
       displayName: 'Deploy to Production'
       inputs:
-        azureSubscription: $(azureServiceConnection)
-        scriptType: 'bash'
-        scriptLocation: 'inlineScript'
-        inlineScript: |
-          echo "🏭 Deploying to Production environment..."
-          az deployment group create \
-            --resource-group $(resourceGroupName) \
-            --template-file $(bicepFile) \
-            --parameters @$(parametersFile) environment=$(environmentName) \
-            --name "bicep-$(environmentName)-$(Build.BuildNumber)" \
-            --verbose
-          
-          echo "🎉 Production deployment completed successfully!"
-
+        deploymentScope: 'Resource Group'
+        azureResourceManagerConnection: $(azureServiceConnection)
+        subscriptionId: $(subscriptionId)
+        action: 'Create Or Update Resource Group'
+        resourceGroupName: $(resourceGroupName)
+        location: $(location)
+        templateLocation: 'Linked artifact'
+        csmFile: 'bicep/main.json'
+        csmParametersFile: $(parametersFile)
+        overrideParameters: '-environment $(environmentName)'
+        deploymentMode: 'Incremental'
+        deploymentName: 'bicep-$(environmentName)-$(Build.BuildNumber)'
+    
     - task: AzureCLI@2
       displayName: 'Post-Deployment Verification'
       inputs:
